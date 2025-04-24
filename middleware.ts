@@ -1,36 +1,37 @@
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { APIError } from "encore.dev/api";
+import { db } from "./db";
 
 const SECRET_KEY = process.env.SECRET_KEY || "your-secret-key"; // Replace with your actual secret key
 
-export const authenticateJWT = async (req: any, res: any, next: () => void): Promise<void> => {
-  const authHeader = req.headers["authorization"];
-  if (!authHeader) {
-    throw APIError.unauthenticated("Authorization header is missing");
+export class JWTSimulator{
+  static generateToken(userId: string): string {
+    return jwt.sign({ userId }, SECRET_KEY, { expiresIn: '1h' });
   }
 
-  const token = authHeader.split(" ")[1];
-  if (!token) {
-    throw APIError.unauthenticated("Token is missing from the authorization header");
-  }
-
-  try {
-    // Verify the token and extract the payload
-    const decoded = jwt.verify(token, SECRET_KEY) as JwtPayload;
-    if (!decoded.userId) {
-      throw APIError.unauthenticated("Invalid token payload: userId is missing");
-    }
-
-    // Attach userId to the request object
-    req.userId = decoded.userId;
-    next();
-  } catch (err) {
-    if (err instanceof jwt.TokenExpiredError) {
-      throw APIError.unauthenticated("Token has expired");
-    } else if (err instanceof jwt.JsonWebTokenError) {
-      throw APIError.unauthenticated("Invalid token");
-    } else {
-      throw APIError.unauthenticated("Authentication failed");
+  static verifyToken(token: string): { userId: string } | null {
+    try {
+      const decoded = jwt.verify(token, SECRET_KEY) as jwt.JwtPayload;
+      return { userId: decoded.userId };
+    } catch (error) {
+      return null;
     }
   }
-};
+
+  static async getUserFromToken(token: string): Promise<{ id: string; email: string; workspaceId: string } | null> {
+    const decoded = this.verifyToken(token);
+    if (!decoded) return null;
+
+    const user = await db.queryRow`
+      SELECT id, email, workspace_id
+      FROM users
+      WHERE id = ${decoded.userId}
+    `;
+
+    return user ? {
+      id: user.id,
+      email: user.email,
+      workspaceId: user.workspace_id
+    } : null;
+  }
+}

@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
-import { authenticateJWT } from "../middleware";
+import { JWTSimulator } from "../middleware";
 
 export interface Plan {
   id: string; // Unique identifier for the plan
@@ -14,7 +14,13 @@ export interface PlanListResponse {
 
 export const createPlan = api(
   { method: "POST", path: "/plan", expose: true },
-  async ({ planName }: { planName: string }): Promise<Plan> => {
+  async ({ planName, token }: { planName: string, token: string }): Promise<Plan> => {
+    const user = await JWTSimulator.getUserFromToken(token);
+    
+    if (!user) {
+      throw APIError.unauthenticated("Invalid or expired token");
+    }
+
     const id = crypto.randomUUID();
     const currentWorkspaceId = await db.queryRow`
     SELECT current_setting('app.workspace_id', true) as workspace_id
@@ -29,7 +35,12 @@ export const createPlan = api(
 
 export const getPlan = api(
   { method: "GET", path: "/plan/:id", expose: true },
-  async ({ id }: { id: string }): Promise<Plan> => {
+  async ({ id, token }: { id: string, token: string }): Promise<Plan> => {
+    const user = await JWTSimulator.getUserFromToken(token);
+    if (!user) {
+      throw APIError.unauthenticated("Invalid or expired token");
+    }
+
     const row = await db.queryRow`
       SELECT id, workspace_id, plan_name
       FROM plan
@@ -48,7 +59,12 @@ export const getPlan = api(
 
 export const listPlans = api(
   { method: "GET", path: "/plans", expose: true },
-  async (): Promise<PlanListResponse> => {
+  async ({token}: {token: string}): Promise<PlanListResponse> => {
+    const user = await JWTSimulator.getUserFromToken(token);
+    if (!user) {
+      throw APIError.unauthenticated("Invalid or expired token");
+    }
+
     const rows = [];
     for await (const row of db.query`
       SELECT id, workspace_id, plan_name
