@@ -1,5 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
+import { authenticateJWT } from "../middleware";
 
 export interface Plan {
   id: string; // Unique identifier for the plan
