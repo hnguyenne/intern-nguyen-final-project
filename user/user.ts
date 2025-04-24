@@ -11,6 +11,10 @@ export interface User {
     workspaceId: string;
 }
 
+export interface WorkspaceUserResponse {
+    users: User[];
+}
+
 export const registerUser = api(
     { method: "POST", path: "/user/register", expose: true },
     async ({ email, password, workspaceId }: { email: string; password: string, workspaceId: string }): Promise<User> => {
@@ -64,5 +68,27 @@ export const listUsers = api(
         rows.push({ id: row.id, email: row.email });
       }
       return { users: rows };
+    }
+  );
+
+  export const listWorkspaceUsers = api(
+    { method: "GET", path: "/workspace/users", expose: true },
+    async (): Promise<WorkspaceUserResponse> => {
+  
+      const rows = [];
+      for await (const row of db.query`
+        SELECT id, email, workspace_id
+        FROM users
+      `) {
+        rows.push(row);
+      }
+  
+      return {
+        users: rows.map(row => ({
+          id: row.id,
+          email: row.email,
+          workspaceId: row.workspace_id
+        }))
+      };
     }
   );
