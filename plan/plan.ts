@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
-import { verifyLogtoAuth, checkScopes } from "../middleware/auth";
+import { verifyLogtoAuth, checkRoles } from "../middleware/auth";
 
 export interface Plan {
   id: string; // Unique identifier for the plan
@@ -16,7 +16,9 @@ export const createPlan = api(
   { method: "POST", path: "/plan", expose: true },
   async ({ planName, token }: { planName: string, token: string }): Promise<Plan> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth, ['write:plan']); // Check for write permission
+    // Only admin can create plans
+    const userRoles = checkRoles(auth, ['admin']);
+    console.log('User roles:', userRoles);
 
     const id = crypto.randomUUID();
     const currentWorkspaceId = await db.queryRow`
@@ -39,7 +41,9 @@ export const getPlan = api(
   { method: "GET", path: "/plan/:id", expose: true },
   async ({ id, token }: { id: string, token: string }): Promise<Plan> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth, ['read:plan']); // Check for read permission
+    // Both admin and user can get plans
+    const userRoles = checkRoles(auth, ['admin', 'user']);
+    console.log('User roles:', userRoles);
 
     const row = await db.queryRow`
       SELECT id, workspace_id, plan_name
@@ -61,7 +65,9 @@ export const listPlans = api(
   { method: "GET", path: "/plans", expose: true },
   async ({ token }: { token: string }): Promise<PlanListResponse> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth, ['read:plan']); // Check for read permission
+    // Both admin and user can list plans
+    const userRoles = checkRoles(auth, ['admin', 'user']);
+    console.log('User roles:', userRoles);
 
     const rows = [];
     for await (const row of db.query`

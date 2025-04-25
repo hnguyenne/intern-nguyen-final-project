@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
-import { verifyLogtoAuth, checkScopes } from "../middleware/auth";
+import { verifyLogtoAuth, checkScopes, checkRoles } from "../middleware/auth";
 
 export interface Workspace {
   id: string; // Unique identifier for the workspace
@@ -20,7 +20,9 @@ export const createWorkspace = api(
   { method: "POST", path: "/workspace", expose: true },
   async ({ name, token }: { name: string, token: string }): Promise<Workspace> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth, ['write:workspace']); // Check for write permission
+    // Only admin can create workspaces
+    const userRoles = checkRoles(auth, ['admin']);
+    console.log('User roles:', userRoles);
 
     const id = crypto.randomUUID();
     await db.exec`
@@ -36,7 +38,9 @@ export const listWorkspaces = api(
   { method: "GET", path: "/workspaces", expose: true },
   async ({ token }: { token: string }): Promise<WorkspaceListResponse> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth, ['read:workspace']); // Check for read permission
+    // Both admin and user can list workspaces
+    const userRoles = checkRoles(auth, ['admin', 'user']);
+    console.log('User roles:', userRoles);
 
     const rows = [];
     for await (const row of db.query`
@@ -53,7 +57,9 @@ export const setWorkspace = api(
     { method: "POST", path: "/workspace/set", expose: true },
     async ({ workspaceId, token }: { workspaceId: string, token: string }): Promise<{ success: boolean }> => {
         const auth = await verifyLogtoAuth(token);
-        checkScopes(auth, ['write:workspace']); // Check for write permission
+        // Both admin and user can set workspace
+        const userRoles = checkRoles(auth, ['admin']);
+        console.log('User roles:', userRoles);
 
         // Validate that the workspace exists
         const row = await db.queryRow`
@@ -72,7 +78,9 @@ export const getWorkspace = api(
     { method: "GET", path: "/workspace/:id", expose: true },
     async ({ id, token }: { id: string, token: string }): Promise<Workspace> => {
         const auth = await verifyLogtoAuth(token);
-        checkScopes(auth, ['read:workspace']); // Check for read permission
+        // Both admin and user can get workspace
+        const userRoles = checkRoles(auth, ['admin', 'user']);
+        console.log('User roles:', userRoles);
 
         const row = await db.queryRow`
             SELECT id, name
@@ -90,7 +98,9 @@ export const getCurrentWorkspace = api(
     { method: "GET", path: "/workspace/current", expose: true },
     async ({ token }: { token: string }): Promise<CurrentWorkspaceResponse> => {
         const auth = await verifyLogtoAuth(token);
-        checkScopes(auth, ['read:workspace']); // Check for read permission
+        // Both admin and user can get current workspace
+        const userRoles = checkRoles(auth, ['admin', 'user']);
+        console.log('User roles:', userRoles);
 
         const currentId = await db.queryRow`
             SELECT current_setting('app.workspace_id', true) as current_workspace_id
