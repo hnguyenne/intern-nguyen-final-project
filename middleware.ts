@@ -1,37 +1,60 @@
-import jwt, { JwtPayload } from "jsonwebtoken";
 import { APIError } from "encore.dev/api";
-import { db } from "./db";
+import { logtoConfig, createLogtoClient } from './user/logto-config';
 
-const SECRET_KEY = process.env.SECRET_KEY || "your-secret-key"; // Replace with your actual secret key
+export const verifyToken = async (token?: string): Promise<string> => {
+  try {
+      if (!token) {
+          throw APIError.unauthenticated("No token provided");
+      }
 
-export class JWTSimulator{
-  static generateToken(userId: string): string {
-    return jwt.sign({ userId }, SECRET_KEY, { expiresIn: '1h' });
+      // Remove 'Bearer ' prefix if present
+      const cleanToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+
+      const logtoClient = createLogtoClient();
+      // Get user info
+      const userInfo = await logtoClient.fetchUserInfo();
+
+      if (!userInfo.sub) {
+          throw APIError.unauthenticated("Invalid token");
+      }
+
+      return userInfo.sub;
+  } catch (error) {
+      console.error("Token verification failed:", error);
+      throw APIError.unauthenticated("Invalid token");
+  }
+};
+
+export async function verifyLogtoAuth(token: string) {
+  if (!token) {
+      throw APIError.unauthenticated("Token is missing");
   }
 
-  static verifyToken(token: string): { userId: string } | null {
-    try {
-      const decoded = jwt.verify(token, SECRET_KEY) as jwt.JwtPayload;
-      return { userId: decoded.userId };
-    } catch (error) {
-      return null;
+  try {
+    const logtoClient = createLogtoClient();
+    await logtoClient.getAccessToken(token);
+
+    const userInfo = await logtoClient.fetchUserInfo();
+    if (!userInfo.sub) {
+      throw APIError.unauthenticated("Invalid user information");
     }
+    return {
+      userId: userInfo.sub,
+      scopes: (userInfo.scopes as string[]) || []
+    };
+    
+  } catch (error) {
+    console.error("Logto authentication error:", error);
+    throw APIError.unauthenticated("Invalid or expired token");
   }
+}
 
-  static async getUserFromToken(token: string): Promise<{ id: string; email: string; workspaceId: string } | null> {
-    const decoded = this.verifyToken(token);
-    if (!decoded) return null;
+export function checkScopes(userScopes: string[], requiredScopes: string[]) {
+  const hasAllScopes = requiredScopes.every(scope => 
+      userScopes.includes(scope)
+  );
 
-    const user = await db.queryRow`
-      SELECT id, email, workspace_id
-      FROM users
-      WHERE id = ${decoded.userId}
-    `;
-
-    return user ? {
-      id: user.id,
-      email: user.email,
-      workspaceId: user.workspace_id
-    } : null;
+  if (!hasAllScopes) {
+      throw APIError.permissionDenied("Insufficient permissions");
   }
 }

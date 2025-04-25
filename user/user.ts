@@ -1,94 +1,103 @@
 import { api, APIError } from "encore.dev/api";
-import { db } from "../db";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
+import { logtoConfig, createLogtoClient } from './logto-config';
 
-const SECRET_KEY = process.env.SECRET_KEY || "your-secret-key";
-
-export interface User {
-    id?: string;
-    email: string;
-    workspaceId: string;
-}
-
-export interface WorkspaceUserResponse {
-    users: User[];
-}
-
-export const registerUser = api(
-    { method: "POST", path: "/user/register", expose: true },
-    async ({ email, password, workspaceId }: { email: string; password: string, workspaceId: string }): Promise<User> => {
-      const id = crypto.randomUUID();
-      const passwordHash = bcrypt.hashSync(password, 10);
-      await db.exec`
-        INSERT INTO users (id, email, password_hash, workspace_id)
-        VALUES (${id}::uuid, ${email}, ${passwordHash}, ${workspaceId}::uuid)
-      `;
-      return { id, email, workspaceId };
-    }
-  );
-
-export const loginUser = api(
-    { method: "POST", path: "/user/login", expose: true },
-    async ({ email, password }: { email: string; password: string }): Promise<{ token: string }> => {
-      const row = await db.queryRow`
-        SELECT id, password_hash, workspace_id
-        FROM users
-        WHERE email = ${email}
-      `;
-      if (!row || !bcrypt.compareSync(password, row.password_hash)) {
-        throw APIError.unauthenticated("Invalid email or password");
-      }
-
-      const workspaceId = row.workspace_id;
-      await db.rawExec(`SELECT set_config('app.workspace_id', '${workspaceId}', false)`);
-  
-      const token = jwt.sign({ userId: row.id }, SECRET_KEY);
-      return { token };
+// Login endpoint
+export const login = api(
+    { method: "GET", path: "/auth/login", expose: true },
+    async (): Promise<void> => {
+        try {
+            const logtoClient = createLogtoClient();
+            const callbackUrl = `${process.env.API_URL || 'http://localhost:4000'}/auth/callback`;
+                       
+            // Initiate the sign-in flow
+            await logtoClient.signIn(callbackUrl);
+        } catch (error) {
+            console.error('Login failed:', error);
+            throw APIError.internal(`Login failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 );
 
-export const logoutUser = api(
-    { method: "POST", path: "/user/logout", expose: true },
-    async (): Promise<{ success: boolean }> => {
-      // Reset the current workspace
-      await db.rawExec(`SELECT set_config('app.workspace_id', NULL, false)`);
-      return { success: true };
+interface TokenResponse {
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    id_token?: string;
+    scope?: string;
+}
+
+// Callback endpoint
+export const callback = api(
+    { method: "GET", path: "/auth/callback", expose: true },
+    async ({ code, state }: { code?: string, state?: string }): Promise<{ access_token: string; user_id: string }> => {
+        try {
+            if (!code) {
+                throw APIError.invalidArgument("Authorization code is required");
+            }
+
+            const logtoClient = createLogtoClient();
+            
+            try {
+                // Handle the callback and exchange code for tokens
+                await logtoClient.handleSignInCallback(`${process.env.API_URL || 'http://localhost:4000'}/auth/callback?code=${code}&state=${state || ''}`);
+            } catch (error) {
+                // If session not found, redirect to login
+                if (error instanceof Error && error.message.includes('Sign-in session not found')) {
+                    await logtoClient.signIn(`${process.env.API_URL || 'http://localhost:4000'}/auth/callback`);
+                    throw APIError.unauthenticated("Session expired, please login again");
+                }
+                throw error;
+            }
+            
+            // Get user info after successful sign-in
+            const userInfo = await logtoClient.fetchUserInfo();
+
+            if (!userInfo.sub) {
+                throw APIError.internal("Failed to get user information");
+            }
+
+            // Get access token
+            const accessToken = await logtoClient.getAccessToken();
+
+            return { 
+                access_token: accessToken,
+                user_id: userInfo.sub
+            };
+        } catch (error) {
+            console.error("Callback error:", error);
+            throw APIError.internal(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     }
 );
 
-export const listUsers = api(
-    { method: "GET", path: "/users", expose: true },
-    async (): Promise<{ users: { id: string; email: string }[] }> => {
-      const rows = [];
-      for await (const row of db.query`
-        SELECT id, email
-        FROM users
-      `) {
-        rows.push({ id: row.id, email: row.email });
-      }
-      return { users: rows };
+// Logout endpoint
+export const logout = api(
+    { method: "POST", path: "/auth/logout", expose: true },
+    async (): Promise<void> => {
+        try {
+            const logtoClient = createLogtoClient();
+            // Clear the session and sign out
+            await logtoClient.signOut();
+            // Redirect to Logto's logout page
+            await logtoClient.signOut(`${process.env.API_URL || 'http://localhost:4000'}`);
+        } catch (error) {
+            console.error("Logout error:", error);
+            throw APIError.internal("Logout failed");
+        }
     }
-  );
+);
 
-  export const listWorkspaceUsers = api(
-    { method: "GET", path: "/workspace/users", expose: true },
-    async (): Promise<WorkspaceUserResponse> => {
-  
-      const rows = [];
-      for await (const row of db.query`
-        SELECT id, email, workspace_id
-        FROM users
-      `) {
-        rows.push(row);
-      }
-  
-      return {
-        users: rows.map(row => ({
-          id: row.id,
-          email: row.email,
-          workspaceId: row.workspace_id
-        }))
-      };
+// Get user info endpoint
+export const getUserInfo = api(
+    { method: "GET", path: "/auth/userinfo", expose: true },
+    async ({ token }: { token: string }) => {
+        try {
+            const logtoClient = createLogtoClient();
+            const userInfo = await logtoClient.fetchUserInfo();
+            return userInfo;
+        } catch (error) {
+            console.error("Get user info error:", error);
+            throw APIError.unauthenticated("Invalid token");
+        }
     }
-  );
+);
