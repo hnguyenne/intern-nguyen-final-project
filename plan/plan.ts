@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
-import { verifyLogtoAuth, checkScopes } from "../middleware";
+import { verifyLogtoAuth, checkScopes } from "../middleware/auth";
 
 export interface Plan {
   id: string; // Unique identifier for the plan
@@ -16,17 +16,22 @@ export const createPlan = api(
   { method: "POST", path: "/plan", expose: true },
   async ({ planName, token }: { planName: string, token: string }): Promise<Plan> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth.scopes, ['write:plan']);
+    checkScopes(auth, ['write:plan']); // Check for write permission
 
     const id = crypto.randomUUID();
     const currentWorkspaceId = await db.queryRow`
-    SELECT current_setting('app.workspace_id', true) as workspace_id
+      SELECT current_setting('app.workspace_id', true) as workspace_id
     `;
+    
+    if (!currentWorkspaceId?.workspace_id) {
+      throw APIError.invalidArgument("No workspace selected");
+    }
+
     await db.exec`
       INSERT INTO plan (id, workspace_id, plan_name)
       VALUES (${id}, (current_setting('app.workspace_id'))::uuid, ${planName})
     `;
-    return { id, workspaceId: currentWorkspaceId?.workspace_id, planName };
+    return { id, workspaceId: currentWorkspaceId.workspace_id, planName };
   }
 );
 
@@ -34,7 +39,7 @@ export const getPlan = api(
   { method: "GET", path: "/plan/:id", expose: true },
   async ({ id, token }: { id: string, token: string }): Promise<Plan> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth.scopes, ['read:plans']);
+    checkScopes(auth, ['read:plan']); // Check for read permission
 
     const row = await db.queryRow`
       SELECT id, workspace_id, plan_name
@@ -54,9 +59,9 @@ export const getPlan = api(
 
 export const listPlans = api(
   { method: "GET", path: "/plans", expose: true },
-  async ({token}: {token: string}): Promise<PlanListResponse> => {
+  async ({ token }: { token: string }): Promise<PlanListResponse> => {
     const auth = await verifyLogtoAuth(token);
-    checkScopes(auth.scopes, ['read:plan']);
+    checkScopes(auth, ['read:plan']); // Check for read permission
 
     const rows = [];
     for await (const row of db.query`

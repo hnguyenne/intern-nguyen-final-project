@@ -1,5 +1,6 @@
 import { db } from "../db";
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
+import { verifyLogtoAuth, checkScopes } from "../middleware/auth";
 
 export interface Workspace {
   id: string; // Unique identifier for the workspace
@@ -17,7 +18,10 @@ export interface CurrentWorkspaceResponse {
 // Create a new workspace
 export const createWorkspace = api(
   { method: "POST", path: "/workspace", expose: true },
-  async ({ name }: { name: string }): Promise<Workspace> => {
+  async ({ name, token }: { name: string, token: string }): Promise<Workspace> => {
+    const auth = await verifyLogtoAuth(token);
+    checkScopes(auth, ['write:workspace']); // Check for write permission
+
     const id = crypto.randomUUID();
     await db.exec`
       INSERT INTO workspace (id, name)
@@ -30,7 +34,10 @@ export const createWorkspace = api(
 // List all workspaces
 export const listWorkspaces = api(
   { method: "GET", path: "/workspaces", expose: true },
-  async (): Promise<WorkspaceListResponse> => {
+  async ({ token }: { token: string }): Promise<WorkspaceListResponse> => {
+    const auth = await verifyLogtoAuth(token);
+    checkScopes(auth, ['read:workspace']); // Check for read permission
+
     const rows = [];
     for await (const row of db.query`
       SELECT id, name
@@ -44,68 +51,70 @@ export const listWorkspaces = api(
 
 export const setWorkspace = api(
     { method: "POST", path: "/workspace/set", expose: true },
-    async ({ workspaceId }: { workspaceId: string }): Promise<{ success: boolean }> => {
+    async ({ workspaceId, token }: { workspaceId: string, token: string }): Promise<{ success: boolean }> => {
+        const auth = await verifyLogtoAuth(token);
+        checkScopes(auth, ['write:workspace']); // Check for write permission
+
         // Validate that the workspace exists
         const row = await db.queryRow`
             SELECT id FROM workspace WHERE id = ${workspaceId}
         `;
         if (!row) {
-            throw new Error(`Workspace with ID ${workspaceId} not found`);
+            throw APIError.notFound(`Workspace with ID ${workspaceId} not found`);
         }
 
         await db.rawExec(`SELECT set_config('app.workspace_id', '${workspaceId}', false)`);
         return { success: true };
     }
-  );
+);
 
 export const getWorkspace = api(
     { method: "GET", path: "/workspace/:id", expose: true },
+    async ({ id, token }: { id: string, token: string }): Promise<Workspace> => {
+        const auth = await verifyLogtoAuth(token);
+        checkScopes(auth, ['read:workspace']); // Check for read permission
 
-
-    async ({ id }: { id: string }): Promise<Workspace> => {
-      const row = await db.queryRow`
-        SELECT id, name
-        FROM workspace
-        WHERE id = ${id}
-      `;
-      if (!row) {
-        throw new Error(`Workspace with ID ${id} not found`);
-      }
-      return { id: row.id, name: row.name };
+        const row = await db.queryRow`
+            SELECT id, name
+            FROM workspace
+            WHERE id = ${id}
+        `;
+        if (!row) {
+            throw APIError.notFound(`Workspace with ID ${id} not found`);
+        }
+        return { id: row.id, name: row.name };
     }
 );
 
 export const getCurrentWorkspace = api(
     { method: "GET", path: "/workspace/current", expose: true },
-    async (): Promise<CurrentWorkspaceResponse> => {
-      // Retrieve the current workspace ID from the session variable
-      const currentId = await db.queryRow`
-        SELECT current_setting('app.workspace_id', true) as current_workspace_id
-      `;
-  
-      if (!currentId?.current_workspace_id) {
-        // If no workspace ID is set, return null
-        return { workspace: null };
-      }
-  
-      // Fetch the workspace details using the current workspace ID
-      const workspace = await db.queryRow`
-        SELECT id, name
-        FROM workspace
-        WHERE id = ${currentId.current_workspace_id}::uuid
-      `;
-  
-      if (!workspace) {
-        // If the workspace does not exist, return null
-        return { workspace: null };
-      }
-  
-      // Return the workspace details
-      return {
-        workspace: {
-          id: workspace.id,
-          name: workspace.name,
-        },
-      };
+    async ({ token }: { token: string }): Promise<CurrentWorkspaceResponse> => {
+        const auth = await verifyLogtoAuth(token);
+        checkScopes(auth, ['read:workspace']); // Check for read permission
+
+        const currentId = await db.queryRow`
+            SELECT current_setting('app.workspace_id', true) as current_workspace_id
+        `;
+
+        if (!currentId?.current_workspace_id) {
+            return { workspace: null };
+        }
+
+        const workspace = await db.queryRow`
+            SELECT id, name
+            FROM workspace
+            WHERE id = ${currentId.current_workspace_id}::uuid
+        `;
+
+        if (!workspace) {
+            return { workspace: null };
+        }
+
+        return {
+            workspace: {
+                id: workspace.id,
+                name: workspace.name,
+            },
+        };
     }
 );

@@ -8,8 +8,8 @@ export const login = api(
         try {
             const logtoClient = createLogtoClient();
             const callbackUrl = `${process.env.API_URL || 'http://localhost:4000'}/auth/callback`;
-                       
-            // Initiate the sign-in flow
+            
+            // Generate the sign-in URL
             await logtoClient.signIn(callbackUrl);
         } catch (error) {
             console.error('Login failed:', error);
