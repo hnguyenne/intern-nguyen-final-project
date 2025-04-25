@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { api, APIError } from "encore.dev/api";
-import { verifyLogtoAuth, checkScopes, checkRoles } from "../middleware/auth";
+import { verifyLogtoAuth, checkScopes, checkRoles, isAdmin } from "../middleware/auth";
 
 export interface Workspace {
   id: string; // Unique identifier for the workspace
@@ -20,9 +20,10 @@ export const createWorkspace = api(
   { method: "POST", path: "/workspace", expose: true },
   async ({ name, token }: { name: string, token: string }): Promise<Workspace> => {
     const auth = await verifyLogtoAuth(token);
-    // Only admin can create workspaces
-    const userRoles = checkRoles(auth, ['admin']);
-    console.log('User roles:', userRoles);
+    if (!isAdmin(auth)) {
+      throw APIError.permissionDenied("Only admins can create workspaces");
+    }
+    console.log('User is admin:', true);
 
     const id = crypto.randomUUID();
     await db.exec`
@@ -38,8 +39,8 @@ export const listWorkspaces = api(
   { method: "GET", path: "/workspaces", expose: true },
   async ({ token }: { token: string }): Promise<WorkspaceListResponse> => {
     const auth = await verifyLogtoAuth(token);
-    // Both admin and user can list workspaces
     const userRoles = checkRoles(auth, ['admin', 'user']);
+    console.log('User is admin:', isAdmin(auth));
     console.log('User roles:', userRoles);
 
     const rows = [];
@@ -57,9 +58,10 @@ export const setWorkspace = api(
     { method: "POST", path: "/workspace/set", expose: true },
     async ({ workspaceId, token }: { workspaceId: string, token: string }): Promise<{ success: boolean }> => {
         const auth = await verifyLogtoAuth(token);
-        // Both admin and user can set workspace
-        const userRoles = checkRoles(auth, ['admin']);
-        console.log('User roles:', userRoles);
+        if (!isAdmin(auth)) {
+          throw APIError.permissionDenied("Only admins can set workspaces");
+        }
+        console.log('User is admin:', true);
 
         // Validate that the workspace exists
         const row = await db.queryRow`
@@ -78,8 +80,8 @@ export const getWorkspace = api(
     { method: "GET", path: "/workspace/:id", expose: true },
     async ({ id, token }: { id: string, token: string }): Promise<Workspace> => {
         const auth = await verifyLogtoAuth(token);
-        // Both admin and user can get workspace
         const userRoles = checkRoles(auth, ['admin', 'user']);
+        console.log('User is admin:', isAdmin(auth));
         console.log('User roles:', userRoles);
 
         const row = await db.queryRow`
@@ -98,8 +100,8 @@ export const getCurrentWorkspace = api(
     { method: "GET", path: "/workspace/current", expose: true },
     async ({ token }: { token: string }): Promise<CurrentWorkspaceResponse> => {
         const auth = await verifyLogtoAuth(token);
-        // Both admin and user can get current workspace
         const userRoles = checkRoles(auth, ['admin', 'user']);
+        console.log('User is admin:', isAdmin(auth));
         console.log('User roles:', userRoles);
 
         const currentId = await db.queryRow`

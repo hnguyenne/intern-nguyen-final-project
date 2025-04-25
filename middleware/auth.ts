@@ -111,6 +111,10 @@ export async function verifyLogtoAuth(token: string): Promise<AuthContext> {
     }
 }
 
+export function isAdmin(auth: AuthContext): boolean {
+    return auth.roles.includes('admin');
+}
+
 export function checkRoles(auth: AuthContext, requiredRoles: string[]): string[] {
     if (!requiredRoles.some(role => auth.roles.includes(role))) {
         throw APIError.permissionDenied("Insufficient permissions");
