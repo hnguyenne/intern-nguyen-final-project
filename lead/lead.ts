@@ -5,12 +5,17 @@ import { db } from "../db";
 export const createLead = api(
   { method: "POST", path: "/lead", expose: true },
   async ({ name, email }: { name: string; email: string }): Promise<{ id: string }> => {
-    const id = crypto.randomUUID();
-    await db.exec`
-      INSERT INTO lead (id, workspace_id, name, email)
-      VALUES (${id}::uuid, current_setting('app.workspace_id')::uuid, ${name}, ${email})
-    `;
-    return { id };
+    try {
+        const id = crypto.randomUUID();
+        await db.exec`
+        INSERT INTO lead (id, workspace_id, name, email)
+        VALUES (${id}::uuid, current_setting('app.workspace_id')::uuid, ${name}, ${email})
+        `;
+        return { id };
+    } catch (error) {
+        console.error("Error creating lead:", error);
+        throw APIError.internal("Failed to create lead");
+    }
   }
 );
 
@@ -18,18 +23,23 @@ export const createLead = api(
 export const fetchLeads = api(
     { method: "GET", path: "/leads", expose: true },
     async (): Promise<{ leads: { id: string; name: string; email: string, workspace_id: string }[] }> => {
-      const rows: { id: string; name: string; email: string, workspace_id: string }[] = [];
-      for await (const row of db.query`
-        SELECT id, name, email, workspace_id
-        FROM lead
-      `) {
-        rows.push({
-          id: row.id as string,
-          name: row.name as string,
-          email: row.email as string,
-          workspace_id: row.workspace_id as string,
-        });
+      try {
+        const rows: { id: string; name: string; email: string, workspace_id: string }[] = [];
+        for await (const row of db.query`
+            SELECT id, name, email, workspace_id
+            FROM lead
+        `) {
+            rows.push({
+            id: row.id as string,
+            name: row.name as string,
+            email: row.email as string,
+            workspace_id: row.workspace_id as string,
+            });
+        }
+        return { leads: rows };
+      } catch (error) {
+        console.error("Error fetching leads:", error);
+        throw APIError.internal("Failed to fetch leads");
       }
-      return { leads: rows };
     }
   );
