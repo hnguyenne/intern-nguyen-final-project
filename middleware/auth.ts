@@ -21,6 +21,31 @@ interface TokenInfo {
     [key: string]: unknown;
 }
 
+interface AuditLogEntry {
+    timestamp: string;
+    userId: string;
+    action: string;
+    success: boolean;
+    roles: string[];
+    scopes: string[];
+    ipAddress?: string;
+    userAgent?: string;
+    requestMethod?: string;
+    requestPath?: string;
+    requestParams?: Record<string, unknown>;
+    responseStatus?: number;
+    errorMessage?: string;
+}
+
+function logAuditEvent(entry: AuditLogEntry): void {
+    // In a production environment, you might want to send this to a dedicated logging service
+    // For now, we'll just log to console in a structured format
+    console.log(JSON.stringify({
+        type: 'AUDIT_LOG',
+        ...entry
+    }));
+}
+
 export async function verifyLogtoAuth(token: string): Promise<AuthContext> {
     try {
         const logtoClient = createLogtoClient();
@@ -111,8 +136,33 @@ export async function verifyLogtoAuth(token: string): Promise<AuthContext> {
     }
 }
 
-export function isAdmin(auth: AuthContext): boolean {
-    return auth.roles.includes('admin');
+export function isAdmin(auth: AuthContext, requestContext?: {
+    ipAddress?: string;
+    userAgent?: string;
+    method?: string;
+    path?: string;
+    params?: Record<string, unknown>;
+}): boolean {
+    const isAdminUser = auth.roles.includes('admin');
+    
+    // Create audit log entry
+    const auditEntry: AuditLogEntry = {
+        timestamp: new Date().toISOString(),
+        userId: auth.userId,
+        action: 'admin_access_attempt',
+        success: isAdminUser,
+        roles: auth.roles,
+        scopes: auth.scopes,
+        ...requestContext
+    };
+    
+    if (!isAdminUser) {
+        auditEntry.errorMessage = 'Access denied: User does not have admin role';
+    }
+    
+    logAuditEvent(auditEntry);
+    
+    return isAdminUser;
 }
 
 export function checkRoles(auth: AuthContext, requiredRoles: string[]): string[] {

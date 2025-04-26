@@ -46,14 +46,6 @@ export const login = api(
     }
 );
 
-interface TokenResponse {
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    id_token?: string;
-    scope?: string;
-}
-
 // Callback endpoint
 export const callback = api(
     { method: "GET", path: "/auth/callback", expose: true },
