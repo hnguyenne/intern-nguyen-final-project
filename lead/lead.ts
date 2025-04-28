@@ -1,6 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { db } from "../db";
-import { eventEmitter } from "./lead.events";
+import { emitLeadNewEvent } from "./lead.events";
 
 
 // Create a lead in the current workspace
@@ -13,7 +13,7 @@ export const createLead = api(
         INSERT INTO lead (id, workspace_id, name, email)
         VALUES (${id}::uuid, current_setting('app.workspace_id')::uuid, ${name}, ${email})
         `;
-        eventEmitter.emit("lead.new", { id, name, email });
+        emitLeadNewEvent(id, name, email);
         return { id };
     } catch (error) {
         console.error("Error creating lead:", error);
@@ -52,7 +52,7 @@ export const sendTestEvent = api(
   async ({ id, name, email }: { id: string; name: string; email: string }): Promise<{ success: boolean }> => {
     try {
       // Emit the lead.new event
-      eventEmitter.emit("lead.new", { id, name, email });
+      emitLeadNewEvent(id, name, email);
       console.log(`Test event emitted: ID=${id}, Name=${name}, Email=${email}`);
       return { success: true };
     } catch (error) {

@@ -1,11 +1,6 @@
-import { api, APIError } from "encore.dev/api";
-import { EventEmitter } from "events";
+import { publishEvent } from "../utils/sns";
 
-// Define the lead.new event
-export const eventEmitter = new EventEmitter();
-
-// Event listener for lead.new
-eventEmitter.on("lead.new", ({ id, name, email }) => {
-    console.log(`New lead created: ID=${id}, Name=${name}, Email=${email}`);
-  });
-  
+// Publish the lead.new event
+export const emitLeadNewEvent = (id: string, name: string, email: string) => {
+  publishEvent("lead.new", { id, name, email });
+};
