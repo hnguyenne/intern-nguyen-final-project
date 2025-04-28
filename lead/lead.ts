@@ -1,7 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { db } from "../db";
 import { emitLeadNewEvent } from "./lead.events";
-
+import "./lead.subscribers";
 
 // Create a lead in the current workspace
 export const createLead = api(
@@ -61,4 +61,3 @@ export const sendTestEvent = api(
     }
   }
 );
-
