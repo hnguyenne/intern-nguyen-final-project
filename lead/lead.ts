@@ -1,5 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { db } from "../db";
+import { eventEmitter } from "./lead.events";
+
 
 // Create a lead in the current workspace
 export const createLead = api(
@@ -11,6 +13,7 @@ export const createLead = api(
         INSERT INTO lead (id, workspace_id, name, email)
         VALUES (${id}::uuid, current_setting('app.workspace_id')::uuid, ${name}, ${email})
         `;
+        eventEmitter.emit("lead.new", { id, name, email });
         return { id };
     } catch (error) {
         console.error("Error creating lead:", error);
@@ -21,7 +24,7 @@ export const createLead = api(
 
 /// Fetch all leads of the current workspace
 export const fetchLeads = api(
-    { method: "GET", path: "/leads", expose: true },
+  { method: "GET", path: "/leads", expose: true },
     async (): Promise<{ leads: { id: string; name: string; email: string, workspace_id: string }[] }> => {
       try {
         const rows: { id: string; name: string; email: string, workspace_id: string }[] = [];
@@ -42,4 +45,20 @@ export const fetchLeads = api(
         throw APIError.internal("Failed to fetch leads");
       }
     }
-  );
+);
+
+export const sendTestEvent = api(
+  { method: "POST", path: "/dev/sendEvent", expose: true },
+  async ({ id, name, email }: { id: string; name: string; email: string }): Promise<{ success: boolean }> => {
+    try {
+      // Emit the lead.new event
+      eventEmitter.emit("lead.new", { id, name, email });
+      console.log(`Test event emitted: ID=${id}, Name=${name}, Email=${email}`);
+      return { success: true };
+    } catch (error) {
+      console.error("Error emitting test event:", error);
+      throw APIError.internal("Failed to emit test event");
+    }
+  }
+);
+
