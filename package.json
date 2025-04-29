@@ -11,6 +11,7 @@
     "@types/express-session": "^1.18.1",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^20.5.7",
+    "@types/uuid": "^10.0.0",
     "typescript": "^5.2.2"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "encore.dev": "^1.46.19",
     "express-session": "^1.18.1",
     "jose": "^6.0.10",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "uuid": "^11.1.0"
   }
 }
