@@ -78,7 +78,7 @@ export const trackConversionAPI = api(
               payload: JSON.stringify({
                 quoteId,
                 workspaceId,
-                status, // e.g., "accepted" or "rejected"
+                status, //"accepted" or "rejected"
               }),
               created_at: new Date().toISOString().replace('T', ' ').split('.')[0],
             },
@@ -126,4 +126,4 @@ export const trackConversionAPI = api(
         throw APIError.internal("Failed to retrieve conversion stats");
       }
     }
-  );
+);

@@ -48,4 +48,4 @@ export const sendLeadTestEvent = api(
         throw APIError.internal("Failed to emit test event");
       }
     }
-  );
+);
