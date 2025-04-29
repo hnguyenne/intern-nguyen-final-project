@@ -47,17 +47,4 @@ export const fetchLeads = api(
     }
 );
 
-export const sendTestEvent = api(
-  { method: "POST", path: "/dev/sendEvent", expose: true },
-  async ({ id, name, email }: { id: string; name: string; email: string }): Promise<{ success: boolean }> => {
-    try {
-      // Emit the lead.new event
-      emitLeadNewEvent(id, name, email);
-      console.log(`Test event emitted: ID=${id}, Name=${name}, Email=${email}`);
-      return { success: true };
-    } catch (error) {
-      console.error("Error emitting test event:", error);
-      throw APIError.internal("Failed to emit test event");
-    }
-  }
-);
+
