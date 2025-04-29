@@ -4,12 +4,13 @@ import { db } from "../db";
 //create an offer for a given application
 export const createOffer = api(
   { method: "POST", path: "/offer", expose: true },
-  async ({ applicationId, amount }: { applicationId: string; amount: number }): Promise<{ id: string }> => {
+  async ({ applicationId, workspaceId, amount }: { applicationId: string; workspaceId: string; amount: number }): Promise<{ id: string }> => {
     try {
         const id = crypto.randomUUID();
+        console.log(`Creating offer offer:`, { applicationId, workspaceId, amount });
         await db.exec`
           INSERT INTO offer (id, workspace_id, application_id, amount)
-          VALUES (${id}::uuid, current_setting('app.workspace_id')::uuid, ${applicationId}::uuid, ${amount})
+          VALUES (${id}::uuid, ${workspaceId}::uuid, ${applicationId}::uuid, ${amount})
         `;
         return { id };
     } catch (error) {

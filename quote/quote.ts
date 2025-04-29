@@ -1,10 +1,11 @@
 import { api, APIError } from "encore.dev/api";
 import { clickhouseClient } from "../utils/clickhouse";
 import { v4 as uuidv4 } from "uuid";
+import { createOffer } from "../offer/offer";
 
 export const sendQuoteAPI = api(
   { method: "POST", path: "/quote/send", expose: true },
-  async ({ workspaceId, amount }: { workspaceId: string; amount: number }): Promise<{ success: boolean }> => {
+  async ({ workspaceId, amount, applicationId }: { workspaceId: string; amount: number, applicationId: string }): Promise<{ success: boolean }> => {
     let generatedQuoteId: string | undefined;
     try {
         generatedQuoteId = uuidv4();
@@ -20,6 +21,7 @@ export const sendQuoteAPI = api(
                     generatedQuoteId,
                     workspaceId,
                     amount,
+                    applicationId,
                 }),
                 created_at: new Date().toISOString().replace('T', ' ').split('.')[0],
             },
@@ -28,7 +30,7 @@ export const sendQuoteAPI = api(
       });
 
       // Add audit log
-      console.log(`Audit Log: Quote sent`, { generatedQuoteId, workspaceId, amount });
+      console.log(`Audit Log: Quote sent`, { generatedQuoteId, workspaceId, amount, applicationId });
 
       return { success: true };
     } catch (error) {
@@ -42,12 +44,17 @@ export const trackConversionAPI = api(
     { method: "POST", path: "/conversion", expose: true },
     async ({ quoteId, status }: { quoteId: string; status: string }): Promise<{ success: boolean }> => {
         let workspaceId: string | undefined;
+        let applicationId: string | undefined;
+        let amount: number | undefined;
       try {
         console.log(`Tracking conversion:`, { quoteId, status });
         
         // Retrieve workspaceId associated with the quoteId
         const query = `
-        SELECT JSONExtractString(payload, 'workspaceId') AS workspace_id
+        SELECT 
+            JSONExtractString(payload, 'workspaceId') AS workspace_id,
+            JSONExtractString(payload, 'applicationId') AS application_id,
+            JSONExtractString(payload, 'amount') AS amount
         FROM events
         WHERE event_type = 'quote.sent' AND JSONExtractString(payload, 'generatedQuoteId') = '${quoteId}'
         LIMIT 1
@@ -68,6 +75,8 @@ export const trackConversionAPI = api(
 
         console.log(data[0].workspace_id);
         workspaceId = data[0].workspace_id;
+        applicationId = data[0].application_id;
+        amount = parseFloat(data[0].amount);
 
         // Log the conversion event to ClickHouse
         await clickhouseClient.insert({
@@ -78,6 +87,8 @@ export const trackConversionAPI = api(
               payload: JSON.stringify({
                 quoteId,
                 workspaceId,
+                applicationId,
+                amount,
                 status, //"accepted" or "rejected"
               }),
               created_at: new Date().toISOString().replace('T', ' ').split('.')[0],
@@ -87,7 +98,21 @@ export const trackConversionAPI = api(
         });
   
         console.log(`Audit Log: Conversion tracked`, { quoteId, workspaceId, status });
-  
+        
+        // If the quote is accepted, create an offer
+        if (status === "accepted") {
+            console.log(`Creating offer for accepted quote:`, { quoteId, workspaceId });
+
+            console.log(`Creating offer for applicationId:`, { applicationId, workspaceId, amount });
+            const offerResponse = await createOffer({
+                applicationId: applicationId!,
+                workspaceId: workspaceId!,
+                amount: amount,
+            });
+
+            console.log(`Offer created successfully:`, offerResponse);
+        }
+
         return { success: true };
       } catch (error) {
         console.error(`Failed to track conversion:`, { quoteId, workspaceId, status }, error);
