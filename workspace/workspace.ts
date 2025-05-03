@@ -56,23 +56,32 @@ export const listWorkspaces = api(
 
 export const setWorkspace = api(
     { method: "POST", path: "/workspace/set", expose: true },
-    async ({ workspaceId, token }: { workspaceId: string, token: string }): Promise<{ success: boolean }> => {
-        const auth = await verifyLogtoAuth(token);
-        if (!isAdmin(auth)) {
-          throw APIError.permissionDenied("Only admins can set workspaces");
-        }
-        console.log('User is admin:', true);
+    async ({ token }: { token: string }): Promise<{ success: boolean }> => {
+        try {
+            const auth = await verifyLogtoAuth(token);
+            const userId = auth.userId;
+            const userRoles = checkRoles(auth, ['admin', 'user']);
+            console.log('User roles:', userRoles);
 
-        // Validate that the workspace exists
-        const row = await db.queryRow`
-            SELECT id FROM workspace WHERE id = ${workspaceId}
-        `;
-        if (!row) {
-            throw APIError.notFound(`Workspace with ID ${workspaceId} not found`);
-        }
+            const userWorkspace = await db.queryRow`
+                SELECT workspace_id
+                FROM users
+                WHERE id = ${userId}
+            `;
+            console.log('User workspace ID:', userWorkspace);
 
-        await db.rawExec(`SELECT set_config('app.workspace_id', '${workspaceId}', false)`);
-        return { success: true };
+            if (!userWorkspace?.workspace_id) {
+                throw APIError.invalidArgument("No workspace associated with the user");
+            }
+
+            await db.rawExec(`SELECT set_config('app.workspace_id', '${userWorkspace.workspace_id}', false)`);
+            console.log('Workspace ID set to:', userWorkspace.workspace_id);
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error setting workspace:', error);
+            throw APIError.internal("Failed to set workspace");
+        }
     }
 );
 
