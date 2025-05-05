@@ -11,11 +11,11 @@ export const sendQuoteAPI = api(
         generatedQuoteId = uuidv4();
         console.log(`Sending quote:`, { workspaceId, amount });
 
-        // Log the quote sent event to ClickHouse
         await clickhouseClient.insert({
             table: 'events',
             values: [
-            {
+            {        // Log the quote sent event to ClickHouse
+
                 event_type: 'quote.sent',
                 payload: JSON.stringify({
                     generatedQuoteId,

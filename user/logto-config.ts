@@ -18,8 +18,11 @@ export const logtoConfig: LogtoConfig = {
 // In-memory storage for session management
 export const sessionStorage = new Map<string, { codeVerifier: string; accessToken?: string }>();
 
+let navigationUrl: string | null = null;
+
 export const createLogtoClient = () => new LogtoClient(logtoConfig, {
     navigate: (url: string) => {
+        navigationUrl = url;
         console.log('Navigation requested to:', url);
     },
     storage: {
@@ -31,4 +34,6 @@ export const createLogtoClient = () => new LogtoClient(logtoConfig, {
             sessionStorage.delete(key);
         }
     }
-}); 
+});
+
+export const getNavigationUrl = () => navigationUrl;

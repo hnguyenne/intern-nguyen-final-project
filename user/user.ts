@@ -1,5 +1,5 @@
 import { api, APIError } from "encore.dev/api";
-import { logtoConfig, createLogtoClient } from './logto-config';
+import { logtoConfig, createLogtoClient, getNavigationUrl } from './logto-config';
 import { verifyLogtoAuth } from '../middleware/auth';
 
 // Login endpoint
@@ -36,8 +36,11 @@ export const login = api(
             
             // Initiate the sign-in flow and return the callback URL
             await logtoClient.signIn(callbackUrl);
+
+            // Get the navigation URL and return it
+            const navigationUrl = getNavigationUrl();
             return {
-                redirect_url: callbackUrl
+                redirect_url: navigationUrl || callbackUrl
             };
         } catch (error) {
             console.error('Login failed:', error);
