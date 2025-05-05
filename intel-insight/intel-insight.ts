@@ -39,20 +39,6 @@ export const createInsight = api(
       // Emit the Insight.New event
       publishEvent("Insight.New", { id, workspaceId, data });
 
-      // Log the action in ClickHouse
-      await clickhouseClient.insert({
-        table: 'audit_log',
-        values: [
-          {
-            action: 'Insight Created',
-            workspace_id: workspaceId,
-            details: data,
-            created_at: new Date().toISOString().replace('T', ' ').split('.')[0], // Remove milliseconds
-          },
-        ],
-        format: 'JSONEachRow',
-      });
-
       return { id };
     } catch (error) {
       console.error("Error creating insight:", error);
