@@ -5,7 +5,7 @@ import { createOffer } from "../offer/offer";
 
 export const sendQuoteAPI = api(
   { method: "POST", path: "/quote/send", expose: true },
-  async ({ workspaceId, amount, applicationId }: { workspaceId: string; amount: number, applicationId: string }): Promise<{ success: boolean }> => {
+  async ({ workspaceId, amount, applicationId }: { workspaceId: string; amount: number, applicationId: string }): Promise<{ success: boolean; generatedQuoteId?: string }> => {
     let generatedQuoteId: string | undefined;
     try {
         generatedQuoteId = uuidv4();
@@ -32,7 +32,7 @@ export const sendQuoteAPI = api(
       // Add audit log
       console.log(`Audit Log: Quote sent`, { generatedQuoteId, workspaceId, amount, applicationId });
 
-      return { success: true };
+      return { success: true, generatedQuoteId };
     } catch (error) {
       console.error(`Failed to send quote:`, { generatedQuoteId, workspaceId, amount }, error);
       throw APIError.internal("Failed to send quote");
