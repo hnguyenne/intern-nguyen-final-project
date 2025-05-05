@@ -96,3 +96,4 @@ export const getInsights = api(
     }
   }
 );
+
