@@ -13,7 +13,7 @@ export const createInsight = api(
       const auth = await verifyLogtoAuth(token);
 
       // Check if the user has the required permission
-      if (!hasPermission(auth, 'write:resource')) {
+      if (!hasPermission(auth, 'write:insight')) {
         throw APIError.permissionDenied("You do not have permission to create insights.");
       }
 
@@ -72,7 +72,7 @@ export const getInsights = api(
       console.log('User permissions:', auth.scopes);
       
       // Check if the user has the required permission
-      if (!hasPermission(auth, 'read:resource')) {
+      if (!hasPermission(auth, 'read:insight')) {
         throw APIError.permissionDenied("You do not have permission to read insights.");
       }
 
