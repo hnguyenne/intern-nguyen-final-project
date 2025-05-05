@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { logtoConfig, createLogtoClient, getNavigationUrl } from './logto-config';
 import { verifyLogtoAuth } from '../middleware/auth';
+import { clickhouseClient } from "../utils/clickhouse";
 
 // Login endpoint
 export const login = api(
@@ -22,9 +23,27 @@ export const login = api(
                 const context = await logtoClient.getContext();
                 console.log('Existing context:', context);
                 if (context.isAuthenticated) {
+                    const userInfo = await logtoClient.fetchUserInfo();
+                    console.log('Fetched user info:', userInfo);
+
                     // If we have a valid session, return the current access token
                     const accessToken = await logtoClient.getAccessToken();
                     console.log('Existing access token:', accessToken);
+                    // Log the login action to ClickHouse
+                    await clickhouseClient.insert({
+                        table: 'events',
+                        values: [
+                            {
+                              event_type: 'user.login',
+                              payload: JSON.stringify({
+                                user_id: userInfo.sub,
+                              }),
+                              processed_at: new Date().toISOString().replace('T', ' ').split('.')[0],
+                            },
+                          ],
+                          format: 'JSONEachRow',
+                    });
+                    console.log('Logged user.login event for user_id:', userInfo.sub);
                     return {
                         redirect_url: `${process.env.API_URL || 'http://localhost:4000'}/auth/callback?token=${accessToken}`
                     };
@@ -122,13 +141,35 @@ export const callback = api(
 // Logout endpoint
 export const logout = api(
     { method: "POST", path: "/auth/logout", expose: true },
-    async (): Promise<void> => {
+    async ({ token }: { token: string }): Promise<{ redirect_url: string }> => {
         try {
+            const auth = await verifyLogtoAuth(token);
             const logtoClient = createLogtoClient();
+
             // Clear the session and sign out
             await logtoClient.signOut();
+
+            // Log the logout action to ClickHouse
+            await clickhouseClient.insert({
+                table: 'events',
+                values: [
+                    {
+                        event_type: 'user.logout',
+                        payload: JSON.stringify({
+                            user_id: auth.userId,
+                        }),
+                        processed_at: new Date().toISOString().replace('T', ' ').split('.')[0],
+                    },
+                ],
+                format: 'JSONEachRow',
+            });
+
             // Redirect to Logto's logout page
             await logtoClient.signOut(`${process.env.API_URL || 'http://localhost:4000'}`);
+            const navigationUrl = getNavigationUrl();
+            return {
+                redirect_url: navigationUrl || `${process.env.API_URL || 'http://localhost:4000'}/auth/logout`
+            };
         } catch (error) {
             console.error("Logout error:", error);
             throw APIError.internal("Logout failed");
@@ -145,7 +186,30 @@ export const getUserInfo = api(
             const logtoClient = createLogtoClient();
             const userInfo = await logtoClient.fetchUserInfo();
             console.log('User info:', userInfo);
-            return {user: userInfo};
+
+            if (!userInfo.sub) {
+                throw APIError.internal("Failed to get user information");
+            }
+
+            // Fetch logs related to the user from ClickHouse
+            const userLogs = await clickhouseClient.query({
+                query: `
+                    SELECT event_type, payload, processed_at
+                    FROM events
+                    WHERE JSONExtractString(payload, 'user_id') = '${userInfo.sub}'
+                    ORDER BY processed_at DESC
+                    LIMIT 100
+                `,
+                format: 'JSON',
+            });
+
+            const logs = await userLogs.json();
+
+            return {
+                user: userInfo,
+                logs: logs.data || [], // Include logs in the response
+            };
+
         } catch (error) {
             console.error("Get user info error:", error);
             throw APIError.unauthenticated("Invalid token");
