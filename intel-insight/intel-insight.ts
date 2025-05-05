@@ -2,12 +2,21 @@ import { api, APIError } from "encore.dev/api";
 import { db } from "../db";
 import { publishEvent } from "../utils/sns";
 import { clickhouseClient } from "../utils/clickhouse";
+import { verifyLogtoAuth, hasPermission } from "../middleware/auth";
 
 // POST /insights: Store tenant-scoped insights
 export const createInsight = api(
   { method: "POST", path: "/insights", expose: true },
-  async ({ data }: { data: string }): Promise<{ id: string }> => {
+  async ({ token, data }: { token: string; data: string }): Promise<{ id: string }> => {
     try {
+      // Verify the user's token
+      const auth = await verifyLogtoAuth(token);
+
+      // Check if the user has the required permission
+      if (!hasPermission(auth, 'write:resource')) {
+        throw APIError.permissionDenied("You do not have permission to create insights.");
+      }
+
       // Get the current workspace ID
       const currentWorkspace = await db.queryRow`
         SELECT current_setting('app.workspace_id', true) as workspace_id
@@ -55,8 +64,18 @@ export const createInsight = api(
 // GET /insights: Return workspace-specific records
 export const getInsights = api(
   { method: "GET", path: "/insights", expose: true },
-  async (): Promise<{ insights: { id: string; data: string }[] }> => {
+  async ({ token }: { token: string}): Promise<{ insights: { id: string; data: string }[] }> => {
     try {
+      // Verify the user's token
+      const auth = await verifyLogtoAuth(token);
+
+      console.log('User permissions:', auth.scopes);
+      
+      // Check if the user has the required permission
+      if (!hasPermission(auth, 'read:resource')) {
+        throw APIError.permissionDenied("You do not have permission to read insights.");
+      }
+
       // Get the current workspace ID
       const currentWorkspace = await db.queryRow`
         SELECT current_setting('app.workspace_id', true) as workspace_id

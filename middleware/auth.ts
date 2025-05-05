@@ -110,18 +110,28 @@ export async function verifyLogtoAuth(token: string): Promise<AuthContext> {
             
             // Extract roles if present
             let roles: string[] = [];
+            let permissions: string[] = [];
             if (tokenInfo.role && Array.isArray(tokenInfo.role)) {
                 roles = tokenInfo.role.map((roleObj: any) => roleObj.name);
+                permissions = tokenInfo.role.flatMap((roleObj: any) => roleObj.scopes || []);
+            }
+
+            // Extract additional permissions from tokenInfo.permissions
+            if (Array.isArray(tokenInfo.permissions)) {
+                permissions = [
+                    ...permissions,
+                    ...tokenInfo.permissions.map((perm: any) => perm.name),
+                ];
             }
             
             console.log('Extracted user ID:', userInfo.sub);
             console.log('Extracted roles:', roles);
-            console.log('Extracted scopes:', scopes);
+            console.log('Extracted permissions:', permissions);
             
             return {
                 userId: userInfo.sub,
                 roles,
-                scopes
+                scopes: permissions,
             };
             
         } catch (e) {
@@ -189,3 +199,7 @@ export function checkScopes(auth: AuthContext, requiredScopes: string[]): void {
         throw APIError.permissionDenied(`Missing required scopes: ${missingScopes.join(', ')}`);
     }
 } 
+
+export function hasPermission(auth: AuthContext, permissionName: string): boolean {
+    return auth.scopes.some((scope: any) => scope.name === permissionName);
+}
