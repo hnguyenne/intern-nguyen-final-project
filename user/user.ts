@@ -142,7 +142,10 @@ export const getUserInfo = api(
     async ({ token }: { token: string }) => {
         try {
             const auth = await verifyLogtoAuth(token);
-            return { userId: auth.userId, roles: auth.roles, scopes: auth.scopes };
+            const logtoClient = createLogtoClient();
+            const userInfo = await logtoClient.fetchUserInfo();
+            console.log('User info:', userInfo);
+            return {user: userInfo};
         } catch (error) {
             console.error("Get user info error:", error);
             throw APIError.unauthenticated("Invalid token");
